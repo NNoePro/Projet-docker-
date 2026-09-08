@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mur éphémère</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,500;1,6..72,300&family=Space+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #0d1a1c;
+    --panel: #14262a;
+    --line: #233c40;
+    --ink: #dfe9e6;
+    --faint: #7b9698;
+    --lamp: #e0a85c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, serif;
+    font-size: 18px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  h1 {
+    font-weight: 300;
+    font-size: clamp(2.4rem, 7vw, 3.6rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.4rem;
+  }
+
+  .intro {
+    color: var(--faint);
+    max-width: 34rem;
+    margin: 0 0 2.5rem;
+    font-size: 1.05rem;
+  }
+
+  form { margin-bottom: 1rem; }
+
+  input, textarea, button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input, textarea {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.6rem;
+    resize: vertical;
+  }
+
+  input::placeholder, textarea::placeholder { color: #547073; }
+
+  input:focus, textarea:focus, button:focus-visible {
+    outline: 2px solid var(--lamp);
+    outline-offset: 1px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.85rem;
+    color: var(--faint);
+  }
+
+  button {
+    background: var(--lamp);
+    color: #17110a;
+    border: none;
+    border-radius: 2px;
+    padding: 0.55rem 1.4rem;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  button:hover { background: #eab873; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .wall { margin-top: 3rem; }
+
+  .note {
+    padding: 1.1rem 0 1.3rem;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+
+  .note p {
+    margin: 0 0 0.45rem;
+    font-size: 1.15rem;
+  }
+
+  .meta {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.78rem;
+    color: var(--faint);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* la vie restante du message, lue directement sous le texte */
+  .life {
+    position: absolute;
+    left: 0; bottom: -1px;
+    height: 1px;
+    background: var(--lamp);
+  }
+
+  .empty {
+    color: var(--faint);
+    font-style: italic;
+    padding: 2rem 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .counts {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-size: 0.85rem;
+    color: var(--faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .note { transition: opacity 1s linear; }
+    .life { transition: width 1s linear; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Mur éphémère</h1>
+  <p class="intro">
+    Écrivez quelque chose. Il restera lisible <span id="ttl">quelques instants</span>,
+    puis s'effacera du mur. La base de données, elle, s'en souviendra.
+  </p>
+
+  <form id="composer">
+    <input id="author" maxlength="32" placeholder="Votre nom" autocomplete="off" required>
+    <textarea id="body" rows="3" maxlength="280" placeholder="Votre message" required></textarea>
+    <div class="row">
+      <span id="left">280 caractères restants</span>
+      <button type="submit">Publier</button>
+    </div>
+  </form>
+
+  <div class="wall" id="wall"></div>
+
+  <p class="counts" id="counts"></p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ttl = 120;
+
+function render(messages) {
+  const wall = $("wall");
+  if (!messages.length) {
+    wall.innerHTML = '<p class="empty">Le mur est vide. Le prochain message sera le seul visible.</p>';
+    return;
+  }
+  wall.innerHTML = messages.map((m) => {
+    const ratio = Math.max(0, Math.min(1, m.remaining / ttl));
+    const opacity = 0.25 + 0.75 * ratio;
+    return `
+      <article class="note" style="opacity:${opacity.toFixed(2)}">
+        <p>${escapeHtml(m.body)}</p>
+        <div class="meta">
+          <span>${escapeHtml(m.author)}</span>
+          <span>${m.remaining} s</span>
+        </div>
+        <div class="life" style="width:${(ratio * 100).toFixed(1)}%"></div>
+      </article>`;
+  }).join("");
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/messages");
+    const data = await res.json();
+    ttl = data.ttl;
+    $("ttl").textContent = ttl + " secondes";
+    render(data.messages);
+
+    const s = await (await fetch("/api/stats")).json();
+    $("counts").textContent =
+      `${s.live} sur le mur · ${s.archived} archivés en base · ${s.expired} déjà effacés`;
+  } catch (e) {
+    $("counts").textContent = "Le serveur ne répond pas. Vérifiez que la pile est démarrée.";
+  }
+}
+
+$("body").addEventListener("input", (e) => {
+  $("left").textContent = (280 - e.target.value.length) + " caractères restants";
+});
+
+$("composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button");
+  btn.disabled = true;
+  try {
+    await fetch("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author: $("author").value, body: $("body").value })
+    });
+    $("body").value = "";
+    $("left").textContent = "280 caractères restants";
+    await refresh();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
