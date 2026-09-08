@@ -42,6 +42,7 @@ services:
       - traefik.http.routers.app.rule=Host(`mur.localhost`)
       - traefik.http.routers.app.entrypoints=web
       - traefik.http.services.app.loadbalancer.server.port=8000
+      - traefik.docker.network=frontend
     networks:
       - frontend
       - backend
@@ -84,5 +85,7 @@ volumes:
 
 networks:
   frontend:
+    name: frontend
   backend:
+    name: backend
     internal: true
